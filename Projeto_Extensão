@@ -1,39 +1,58 @@
-// Criação do projeto de gestão de documentos perdidos usando React Native
-
-// Estrutura Inicial: Gerenciamento de Documentação Perdida
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { View, Text, TextInput, Button, FlatList, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Button, FlatList, Alert, StyleSheet, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Stack = createStackNavigator();
+
+// Componente para Listagem de Documentos Perdidos
+const DocumentoItem = ({ descricao, local }) => (
+  <View style={styles.listItem}>
+    <Text style={styles.listTitle}>{descricao}</Text>
+    <Text style={styles.listSubtitle}>Local: {local}</Text>
+  </View>
+);
 
 // Tela Principal
 const HomeScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Sistema de Gestão de Documentos Perdidos</Text>
-      <Button
-        title="Cadastrar Documento Perdido"
-        onPress={() => navigation.navigate('Cadastro')}
-      />
-      <Button
-        title="Buscar Documento"
-        onPress={() => navigation.navigate('Busca')}
-      />
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Cadastro')}>
+        <Text style={styles.buttonText}>Cadastrar Documento Perdido</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Busca')}>
+        <Text style={styles.buttonText}>Buscar Documento</Text>
+      </TouchableOpacity>
     </View>
   );
 };
 
 // Tela de Cadastro
 const CadastroScreen = ({ navigation }) => {
-  const [descricao, setDescricao] = React.useState('');
-  const [local, setLocal] = React.useState('');
+  const [descricao, setDescricao] = useState('');
+  const [local, setLocal] = useState('');
 
-  const handleCadastro = () => {
-    // Lógica para registrar o documento perdido
-    alert('Documento cadastrado com sucesso!');
-    navigation.goBack();
+  const handleCadastro = async () => {
+    if (!descricao || !local) {
+      Alert.alert('Erro', 'Preencha todos os campos!');
+      return;
+    }
+
+    const novoDocumento = { id: Date.now().toString(), descricao, local };
+    
+    try {
+      const documentosExistentes = await AsyncStorage.getItem('documentos');
+      const documentos = documentosExistentes ? JSON.parse(documentosExistentes) : [];
+      documentos.push(novoDocumento);
+      await AsyncStorage.setItem('documentos', JSON.stringify(documentos));
+
+      Alert.alert('Sucesso', 'Documento cadastrado com sucesso!');
+      navigation.goBack();
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível salvar o documento.');
+    }
   };
 
   return (
@@ -51,23 +70,35 @@ const CadastroScreen = ({ navigation }) => {
         value={local}
         onChangeText={setLocal}
       />
-      <Button title="Registrar" onPress={handleCadastro} />
+      <TouchableOpacity style={styles.button} onPress={handleCadastro}>
+        <Text style={styles.buttonText}>Registrar</Text>
+      </TouchableOpacity>
     </View>
   );
 };
 
 // Tela de Busca
 const BuscaScreen = () => {
-  const [query, setQuery] = React.useState('');
-  const [resultados, setResultados] = React.useState([]);
+  const [query, setQuery] = useState('');
+  const [resultados, setResultados] = useState([]);
+  const [todosDocumentos, setTodosDocumentos] = useState([]);
+
+  useEffect(() => {
+    const carregarDocumentos = async () => {
+      try {
+        const documentosSalvos = await AsyncStorage.getItem('documentos');
+        if (documentosSalvos) {
+          setTodosDocumentos(JSON.parse(documentosSalvos));
+        }
+      } catch (error) {
+        Alert.alert('Erro', 'Não foi possível carregar os documentos.');
+      }
+    };
+    carregarDocumentos();
+  }, []);
 
   const handleBusca = () => {
-    // Lógica de busca no banco de dados fictício
-    const mockData = [
-      { id: '1', descricao: 'Carteira Preta', local: 'Praça Central' },
-      { id: '2', descricao: 'RG José Silva', local: 'Shopping ABC' },
-    ];
-    const filtrados = mockData.filter((item) =>
+    const filtrados = todosDocumentos.filter((item) =>
       item.descricao.toLowerCase().includes(query.toLowerCase())
     );
     setResultados(filtrados);
@@ -82,16 +113,14 @@ const BuscaScreen = () => {
         value={query}
         onChangeText={setQuery}
       />
-      <Button title="Buscar" onPress={handleBusca} />
+      <TouchableOpacity style={styles.button} onPress={handleBusca}>
+        <Text style={styles.buttonText}>Buscar</Text>
+      </TouchableOpacity>
       <FlatList
         data={resultados}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.listItem}>
-            <Text>{item.descricao}</Text>
-            <Text>Local: {item.local}</Text>
-          </View>
-        )}
+        renderItem={({ item }) => <DocumentoItem descricao={item.descricao} local={item.local} />}
+        ListEmptyComponent={<Text style={styles.emptyText}>Nenhum documento encontrado.</Text>}
       />
     </View>
   );
@@ -109,34 +138,70 @@ export default function App() {
   );
 }
 
+// Estilos aprimorados
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f4f4f4',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 18,
     marginBottom: 20,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   input: {
     width: '100%',
     borderWidth: 1,
     borderColor: '#ccc',
-    borderRadius: 5,
-    padding: 10,
+    borderRadius: 8,
+    padding: 12,
     marginBottom: 10,
+    backgroundColor: '#fff',
+  },
+  button: {
+    backgroundColor: '#007BFF',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+    width: '100%',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   listItem: {
     width: '100%',
-    padding: 10,
+    padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
+    borderBottomColor: '#ddd',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  listTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  listSubtitle: {
+    fontSize: 14,
+    color: '#555',
+  },
+  emptyText: {
+    marginTop: 20,
+    fontSize: 16,
+    color: '#888',
   },
 });
